@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Plaquinha Pix</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Gerador de Plaquinha Pix</h1>
+        <p>Desenvolva plaquinhas de pagamento Pix elegantes e profissionais para o seu negócio em poucos cliques. Perfeito para impressão ou envio digital.</p>
+    </header>
+
+    <main class="container">
+        <section class="form-panel">
+            <div id="errorMessage" class="error-message"></div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="tipoChave">Tipo de Chave</label>
+                    <select id="tipoChave">
+                        <option value="celular">Celular</option>
+                        <option value="cpf">CPF</option>
+                        <option value="cnpj">CNPJ</option>
+                        <option value="email">E-mail</option>
+                        <option value="aleatoria">Chave Aleatória</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="chavePix">Chave Pix</label>
+                    <input type="text" id="chavePix" placeholder="(47) 99999-8888">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="nome">Nome do Recebedor</label>
+                    <input type="text" id="nome" maxlength="60" placeholder="Ex: JOAO DA SILVA INTERNACIONAL">
+                </div>
+                <div class="form-group">
+                    <label for="cidade">Cidade</label>
+                    <input type="text" id="cidade" maxlength="15" placeholder="Ex: BLUMENAU">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="valor">Valor (Opcional)</label>
+                    <input type="text" id="valor" placeholder="0,00">
+                </div>
+                <div class="form-group">
+                    <label for="txid">Identificador / TxID (Opcional)</label>
+                    <input type="text" id="txid" maxlength="25" placeholder="Ex: PEDIDO123">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Logo do Estabelecimento (Opcional)</label>
+                <div class="logo-input-wrapper">
+                    <input type="file" id="logoInput" accept="image/*">
+                    <button type="button" id="btnRemoveLogo" class="btn-remove-logo">Remover</button>
+                </div>
+            </div>
+
+            <label class="checkbox-group">
+                <input type="checkbox" id="showChaveTxt">
+                <span>Incluir chave Pix em formato de texto abaixo do QR Code.</span>
+            </label>
+        </section>
+
+        <section class="preview-panel">
+            <div class="plaquinha-wrapper" id="plaquinhaArte">
+                <div class="plaquinha-header">
+                    <img id="previewLogo" class="plaquinha-logo" style="display: none;" alt="Logo">
+                    <h2>Pague com Pix</h2>
+                </div>
+                <div class="plaquinha-body">
+                    <div class="qr-container">
+                        <div id="qrcode"></div>
+                    </div>
+                    <div id="viewNome" class="info-recebedor">NOME DO RECEBEDOR</div>
+                    <div id="viewCidade" class="info-cidade">CIDADE</div>
+                    <div id="viewValor" class="info-valor" style="display: none;">R$ 0,00</div>
+                    <div class="info-instrucao">Aponte a câmera do seu banco</div>
+                    
+                    <div id="boxChaveManual" class="info-chave-manual" style="display: none;">
+                        Se preferir, nossa chave Pix:
+                        <span id="viewChaveManual">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions-grid">
+                <button type="button" class="btn btn-primary" id="btnCopy">Copiar código</button>
+                <button type="button" class="btn btn-outline" id="btnDownloadQR">Baixar QR</button>
+                <button type="button" class="btn btn-secondary btn-full" id="btnDownloadPlaquinha">Baixar Plaquinha (PNG)</button>
+                <button type="button" class="btn btn-outline btn-full" id="btnPrint">Imprimir plaquinha</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const tipoChave = document.getElementById('tipoChave');
+        const chavePix = document.getElementById('chavePix');
+        const nome = document.getElementById('nome');
+        const cidade = document.getElementById('cidade');
+        const valor = document.getElementById('valor');
+        const txid = document.getElementById('txid');
+        const logoInput = document.getElementById('logoInput');
+        const btnRemoveLogo = document.getElementById('btnRemoveLogo');
+        const showChaveTxt = document.getElementById('showChaveTxt');
+        const errorMessage = document.getElementById('errorMessage');
+
+        const previewLogo = document.getElementById('previewLogo');
+        const viewNome = document.getElementById('viewNome');
+        const viewCidade = document.getElementById('viewCidade');
+        const viewValor = document.getElementById('viewValor');
+        const boxChaveManual = document.getElementById('boxChaveManual');
+        const viewChaveManual = document.getElementById('viewChaveManual');
+        const qrcodeElement = document.getElementById('qrcode');
+
+        let qrCodeInstance = new QRCode(qrcodeElement, {
+            text: "000201",
+            width: 240,
+            height: 240,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        let currentPayload = "";
+        let logoDataURL = "";
+
+        function removeAcentos(str) {
+            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+        }
+
+        function formatarTLV(tag, valor) {
+            const len = String(valor).length.toString().padStart(2, '0');
+            return `${tag}${len}${valor}`;
+        }
+
+        function calcularCRC16(str) {
+            let crc = 0xFFFF;
+            const polynomial = 0x1021;
+
+            for (let i = 0; i < str.length; i++) {
+                let b = str.charCodeAt(i);
+                for (let j = 0; j < 8; j++) {
+                    let bit = ((b >> (7 - j)) & 1) == 1;
+                    let c15 = ((crc >> 15) & 1) == 1;
+                    crc <<= 1;
+                    if (c15 ^ bit) crc ^= polynomial;
+                }
+            }
+            crc &= 0xFFFF;
+            return crc.toString(16).toUpperCase().padStart(4, '0');
+        }
+
+        function obterChaveTratada() {
+            let raw = chavePix.value.trim();
+            const tipo = tipoChave.value;
+
+            if (tipo === 'celular') {
+                const digitos = raw.replace(/\D/g, '');
+                return digitos ? `+55${digitos}` : '';
+            } else if (tipo === 'cpf' || tipo === 'cnpj') {
+                return raw.replace(/\D/g, '');
+            }
+            return raw;
+        }
+
+        function formatarChaveVisual(chave, tipo) {
+            const digitos = chave.replace(/\D/g, '');
+            if (tipo === 'celular' && digitos.length >= 11) {
+                let d = digitos.startsWith('55') ? digitos.substring(2) : digitos;
+                if(d.length === 11) {
+                    return `(${d.substring(0,2)}) ${d.substring(2,7)}-${d.substring(7)}`;
+                }
+                return d;
+            }
+            if (tipo === 'cpf' && digitos.length === 11) {
+                return `${digitos.substring(0,3)}.${digitos.substring(3,6)}.${digitos.substring(6,9)}-${digitos.substring(9)}`;
+            }
+            if (tipo === 'cnpj' && digitos.length === 14) {
+                return `${digitos.substring(0,2)}.${digitos.substring(2,5)}.${digitos.substring(5,8)}/${digitos.substring(8,12)}-${digitos.substring(12)}`;
+            }
+            return chave;
+        }
+
+        function gerarPixPayload() {
+            errorMessage.style.display = 'none';
+            
+            const chave = obterChaveTratada();
+            // Mantém .substring(0,25) estritamente aqui para respeitar o limite padrão do BC no QR Code
+            let nomeVal = removeAcentos(nome.value.trim()).substring(0, 25);
+            let cidadeVal = removeAcentos(cidade.value.trim()).substring(0, 15);
+            let txidVal = txid.value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 25);
+
+            if (!chave || !nomeVal || !cidadeVal) {
+                return "";
+            }
+
+            const sub26_00 = formatarTLV("00", "br.gov.bcb.pix");
+            const sub26_01 = formatarTLV("01", chave);
+            const merchantAccountInfo = formatarTLV("26", sub26_00 + sub26_01);
+
+            let payload = "";
+            payload += formatarTLV("00", "01");
+            payload += formatarTLV("01", "11");
+            payload += merchantAccountInfo;
+            payload += formatarTLV("52", "0000");
+            payload += formatarTLV("53", "986");
+
+            let valorTexto = valor.value.replace(',', '.').trim();
+            if (valorTexto) {
+                const num = parseFloat(valorTexto);
+                if (!isNaN(num) && num > 0) {
+                    payload += formatarTLV("54", num.toFixed(2));
+                }
+            }
+
+            payload += formatarTLV("58", "BR");
+            payload += formatarTLV("59", nomeVal);
+            payload += formatarTLV("60", cityPadrao(cidadeVal));
+
+            const sub62_05 = formatarTLV("05", txidVal || "***");
+            payload += formatarTLV("62", sub62_05);
+
+            payload += "6304";
+            const crc = calcularCRC16(payload);
+            payload += crc;
+
+            return payload;
+        }
+
+        function cityPadrao(c) {
+            return c.length < 1 ? "BR" : c;
+        }
+
+        function atualizarPlaquinha() {
+            // Na exibição visual da plaquinha, mostra o nome completo digitado (sem cortar com substring)
+            viewNome.textContent = removeAcentos(nome.value.trim()) || "NOME DO RECEBEDOR";
+            viewCidade.textContent = removeAcentos(cidade.value.trim()) || "CIDADE";
+
+            let valorTexto = valor.value.replace(',', '.').trim();
+            const num = parseFloat(valorTexto);
+            if (valorTexto && !isNaN(num) && num > 0) {
+                viewValor.textContent = `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                viewValor.style.display = 'block';
+            } else {
+                viewValor.style.display = 'none';
+            }
+
+            if (showChaveTxt.checked && chavePix.value.trim()) {
+                viewChaveManual.textContent = formatarChaveVisual(chavePix.value.trim(), tipoChave.value);
+                boxChaveManual.style.display = 'block';
+            } else {
+                boxChaveManual.style.display = 'none';
+            }
+
+            currentPayload = gerarPixPayload();
+            if (currentPayload) {
+                qrCodeInstance.clear();
+                qrCodeInstance.makeCode(currentPayload);
+            }
+        }
+
+        logoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    logoDataURL = evt.target.result;
+                    previewLogo.src = logoDataURL;
+                    previewLogo.style.display = 'block';
+                    btnRemoveLogo.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        btnRemoveLogo.addEventListener('click', function() {
+            logoInput.value = "";
+            logoDataURL = "";
+            previewLogo.src = "";
+            previewLogo.style.display = 'none';
+            btnRemoveLogo.style.display = 'none';
+        });
+
+        [tipoChave, chavePix, nome, cityPadrao, valor, txid, showChaveTxt].forEach(el => {
+            if(el && el.addEventListener) {
+                el.addEventListener('input', atualizarPlaquinha);
+            }
+        });
+        
+        nome.addEventListener('input', atualizarPlaquinha);
+        cidade.addEventListener('input', atualizarPlaquinha);
+
+        tipoChave.addEventListener('change', () => {
+            if(tipoChave.value === 'celular') chavePix.placeholder = "(47) 99999-8888";
+            else if(tipoChave.value === 'cpf') chavePix.placeholder = "000.000.000-00";
+            else if(tipoChave.value === 'cnpj') chavePix.placeholder = "00.000.000/0000-00";
+            else chavePix.placeholder = "Chave Pix";
+            atualizarPlaquinha();
+        });
+
+        function validarCampos() {
+            if (!chavePix.value.trim() || !nome.value.trim() || !cidade.value.trim()) {
+                errorMessage.textContent = "Preencha a Chave Pix, Nome e Cidade para habilitar o código.";
+                errorMessage.style.display = 'block';
+                return false;
+            }
+            errorMessage.style.display = 'none';
+            return true;
+        }
+
+        document.getElementById('btnCopy').addEventListener('click', function() {
+            if (!validarCampos()) return;
+            navigator.clipboard.writeText(currentPayload).then(() => {
+                alert("Código Pix copiado!");
+            }).catch(err => {
+                alert("Erro ao copiar.");
+            });
+        });
+
+        document.getElementById('btnDownloadQR').addEventListener('click', function() {
+            if (!validarCampos()) return;
+            const imgEl = qrcodeElement.querySelector('img');
+            if (imgEl) {
+                const link = document.createElement('a');
+                link.download = 'qrcode-pix.png';
+                link.href = imgEl.src;
+                link.click();
+            }
+        });
+
+        document.getElementById('btnDownloadPlaquinha').addEventListener('click', function() {
+            if (!validarCampos()) return;
+            
+            const target = document.getElementById('plaquinhaArte');
+            html2canvas(target, {
+                scale: 3,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                logging: false,
+                windowWidth: target.scrollWidth,
+                windowHeight: target.scrollHeight
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `plaquinha-pix-${nome.value.trim().toLowerCase().replace(/\s+/g, '-')}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        });
+
+        document.getElementById('btnPrint').addEventListener('click', function() {
+            if (!validarCampos()) return;
+            window.print();
+        });
+
+        nome.value = "JOAO DA SILVA";
+        cidade.value = "BLUMENAU";
+        chavePix.value = "teste@email.com";
+        tipoChave.value = "email";
+        valor.value = "10,00";
+        atualizarPlaquinha();
+    </script>
+</body>
+</html>
