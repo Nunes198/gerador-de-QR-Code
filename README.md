@@ -22,14 +22,6 @@ Contribuição
 Licença
 - Sem licença definida. Adicione um `LICENSE` se desejar publicar sob termos específicos.
 
-Projeto simples que contém um gerador de QR Code em um único arquivo HTML.
+Nota sobre arquivo antigo
+- O arquivo original `gerador qr code.html` foi removido do repositório — a versão atualizada está em [index.html](index.html) com CSS e JS separados (`style.css`, `app.js`).
 
-Como usar:
-
-- Abra o arquivo `gerador qr code.html` no navegador.
-- Preencha o texto/URL e gere o QR Code.
-
-Arquivo principal:
-- `gerador qr code.html`
-
-Licença: sem licença definida — adicione uma se desejar.
