@@ -38,6 +38,136 @@ function formatarTLV(tag, valor) {
     return `${tag}${len}${valor}`;
 }
 
+function somenteDigitos(valor) {
+    return valor.replace(/\D/g, '');
+}
+
+function formatarCpf(digitos) {
+    return digitos
+        .slice(0, 11)
+        .replace(/^(\d{3})(\d)/, '$1.$2')
+        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1-$2');
+}
+
+function formatarCnpj(digitos) {
+    return digitos
+        .slice(0, 14)
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d)/, '$1-$2');
+}
+
+function formatarChavePixDigitada(valor, tipo) {
+    const digitos = somenteDigitos(valor);
+
+    if (tipo === 'cpf') {
+        return formatarCpf(digitos);
+    }
+
+    if (tipo === 'cnpj') {
+        return formatarCnpj(digitos);
+    }
+
+    return valor;
+}
+
+function validarCpf(digitos) {
+    if (!/^\d{11}$/.test(digitos)) return false;
+    if (/^(\d)\1+$/.test(digitos)) return false;
+
+    let soma = 0;
+    for (let i = 0; i < 9; i++) {
+        soma += parseInt(digitos[i], 10) * (10 - i);
+    }
+    let resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    if (resto !== parseInt(digitos[9], 10)) return false;
+
+    soma = 0;
+    for (let i = 0; i < 10; i++) {
+        soma += parseInt(digitos[i], 10) * (11 - i);
+    }
+    resto = (soma * 10) % 11;
+    if (resto === 10) resto = 0;
+    return resto === parseInt(digitos[10], 10);
+}
+
+function validarCnpj(digitos) {
+    if (!/^\d{14}$/.test(digitos)) return false;
+    if (/^(\d)\1+$/.test(digitos)) return false;
+
+    const calcularDigito = (base, pesos) => {
+        let soma = 0;
+        for (let i = 0; i < pesos.length; i++) {
+            soma += parseInt(base[i], 10) * pesos[i];
+        }
+        const resto = soma % 11;
+        return resto < 2 ? 0 : 11 - resto;
+    };
+
+    const pesosPrimeiro = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const pesosSegundo = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+    const digito1 = calcularDigito(digitos.slice(0, 12), pesosPrimeiro);
+    if (digito1 !== parseInt(digitos[12], 10)) return false;
+
+    const digito2 = calcularDigito(digitos.slice(0, 13), pesosSegundo);
+    return digito2 === parseInt(digitos[13], 10);
+}
+
+function validarChaveDocumento(tipo, valor) {
+    const digitos = somenteDigitos(valor);
+
+    if (tipo === 'cpf') {
+        return {
+            valido: validarCpf(digitos),
+            completo: digitos.length === 11
+        };
+    }
+
+    if (tipo === 'cnpj') {
+        return {
+            valido: validarCnpj(digitos),
+            completo: digitos.length === 14
+        };
+    }
+
+    return { valido: true, completo: true };
+}
+
+function aplicarMascaraChavePix() {
+    if (tipoChave.value === 'cpf') {
+        chavePix.value = formatarCpf(somenteDigitos(chavePix.value));
+        return;
+    }
+
+    if (tipoChave.value === 'cnpj') {
+        chavePix.value = formatarCnpj(somenteDigitos(chavePix.value));
+    }
+}
+
+function configurarCampoChave() {
+    if (tipoChave.value === 'cpf') {
+        chavePix.placeholder = '000.000.000-00';
+        chavePix.inputMode = 'numeric';
+        chavePix.maxLength = 14;
+    } else if (tipoChave.value === 'cnpj') {
+        chavePix.placeholder = '00.000.000/0000-00';
+        chavePix.inputMode = 'numeric';
+        chavePix.maxLength = 18;
+    } else if (tipoChave.value === 'celular') {
+        chavePix.placeholder = '(47) 99999-8888';
+        chavePix.inputMode = 'tel';
+        chavePix.maxLength = 20;
+    } else {
+        chavePix.placeholder = 'Chave Pix';
+        chavePix.inputMode = 'text';
+        chavePix.maxLength = 120;
+    }
+}
+
 function calcularCRC16(str) {
     let crc = 0xFFFF;
     const polynomial = 0x1021;
@@ -90,6 +220,17 @@ function gerarPixPayload() {
     errorMessage.style.display = 'none';
     
     const chave = obterChaveTratada();
+    const tipo = tipoChave.value;
+    const validacaoDocumento = validarChaveDocumento(tipo, chavePix.value.trim());
+
+    if ((tipo === 'cpf' || tipo === 'cnpj') && validacaoDocumento.completo && !validacaoDocumento.valido) {
+        errorMessage.textContent = tipo === 'cpf'
+            ? 'CPF inválido. Confira os números e a pontuação.'
+            : 'CNPJ inválido. Confira os números e a pontuação.';
+        errorMessage.style.display = 'block';
+        return "";
+    }
+
     // Mantém .substring(0,25) estritamente aqui para respeitar o limite padrão do BC no QR Code
     let nomeVal = removeAcentos(nome.value.trim()).substring(0, 25);
     let cidadeVal = removeAcentos(cidade.value.trim()).substring(0, 15);
@@ -186,7 +327,7 @@ btnRemoveLogo.addEventListener('click', function() {
     btnRemoveLogo.style.display = 'none';
 });
 
-[tipoChave, chavePix, nome, cityPadrao, valor, txid, showChaveTxt].forEach(el => {
+[tipoChave, nome, cityPadrao, valor, txid, showChaveTxt].forEach(el => {
     if(el && el.addEventListener) {
         el.addEventListener('input', atualizarPlaquinha);
     }
@@ -195,11 +336,14 @@ btnRemoveLogo.addEventListener('click', function() {
 nome.addEventListener('input', atualizarPlaquinha);
 cidade.addEventListener('input', atualizarPlaquinha);
 
+chavePix.addEventListener('input', () => {
+    aplicarMascaraChavePix();
+    atualizarPlaquinha();
+});
+
 tipoChave.addEventListener('change', () => {
-    if(tipoChave.value === 'celular') chavePix.placeholder = "(47) 99999-8888";
-    else if(tipoChave.value === 'cpf') chavePix.placeholder = "000.000.000-00";
-    else if(tipoChave.value === 'cnpj') chavePix.placeholder = "00.000.000/0000-00";
-    else chavePix.placeholder = "Chave Pix";
+    configurarCampoChave();
+    aplicarMascaraChavePix();
     atualizarPlaquinha();
 });
 
@@ -209,6 +353,26 @@ function validarCampos() {
         errorMessage.style.display = 'block';
         return false;
     }
+
+    const tipo = tipoChave.value;
+    const validacaoDocumento = validarChaveDocumento(tipo, chavePix.value.trim());
+
+    if (tipo === 'cpf' && !validacaoDocumento.valido) {
+        errorMessage.textContent = validacaoDocumento.completo
+            ? 'CPF inválido. Confira a pontuação e os dígitos.'
+            : 'CPF incompleto. Digite 11 números.';
+        errorMessage.style.display = 'block';
+        return false;
+    }
+
+    if (tipo === 'cnpj' && !validacaoDocumento.valido) {
+        errorMessage.textContent = validacaoDocumento.completo
+            ? 'CNPJ inválido. Confira a pontuação e os dígitos.'
+            : 'CNPJ incompleto. Digite 14 números.';
+        errorMessage.style.display = 'block';
+        return false;
+    }
+
     errorMessage.style.display = 'none';
     return true;
 }
@@ -296,5 +460,6 @@ nome.value = "JOAO DA SILVA";
 cidade.value = "BLUMENAU";
 chavePix.value = "teste@email.com";
 tipoChave.value = "email";
-valor.value = "10,00";
+valor.value = "";
+configurarCampoChave();
 atualizarPlaquinha();
