@@ -213,10 +213,29 @@ function validarCampos() {
     return true;
 }
 
+function baixarArquivoPng(canvas, nomeArquivo) {
+    canvas.toBlob(blob => {
+        if (!blob) {
+            alert("Erro ao gerar o PNG.");
+            return;
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = nomeArquivo;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
+}
+
 document.getElementById('btnCopy').addEventListener('click', function() {
     if (!validarCampos()) return;
-    navigator.clipboard.writeText(currentPayload).then(() => {
-        alert("Código Pix copiado!");
+    navigator.clipboard.writeText(chavePix.value.trim()).then(() => {
+        alert("Chave Pix copiada!");
     }).catch(err => {
         alert("Erro ao copiar.");
     });
@@ -224,12 +243,28 @@ document.getElementById('btnCopy').addEventListener('click', function() {
 
 document.getElementById('btnDownloadQR').addEventListener('click', function() {
     if (!validarCampos()) return;
+
+    const qrCanvas = qrcodeElement.querySelector('canvas');
+    if (qrCanvas) {
+        baixarArquivoPng(qrCanvas, 'qrcode-pix.png');
+        return;
+    }
+
     const imgEl = qrcodeElement.querySelector('img');
     if (imgEl) {
-        const link = document.createElement('a');
-        link.download = 'qrcode-pix.png';
-        link.href = imgEl.src;
-        link.click();
+        const canvas = document.createElement('canvas');
+        const size = imgEl.naturalWidth || imgEl.width;
+        canvas.width = size;
+        canvas.height = size;
+
+        const contexto = canvas.getContext('2d');
+        if (!contexto) {
+            alert("Erro ao gerar o PNG.");
+            return;
+        }
+
+        contexto.drawImage(imgEl, 0, 0, size, size);
+        baixarArquivoPng(canvas, 'qrcode-pix.png');
     }
 });
 
